@@ -1,32 +1,22 @@
-use std::marker::PhantomData;
-
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    to_binary, Addr, CosmosMsg, CustomMsg, QuerierWrapper, StdResult, WasmMsg, WasmQuery,
-};
+use crate::{ExecuteMsg, QueryMsg};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, QuerierWrapper, StdResult, WasmMsg, WasmQuery};
 use cw721::{
     AllNftInfoResponse, Approval, ApprovalResponse, ApprovalsResponse, ContractInfoResponse,
     NftInfoResponse, NumTokensResponse, OperatorsResponse, OwnerOfResponse, TokensResponse,
 };
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{ExecuteMsg, QueryMsg};
-
-#[cw_serde]
-pub struct Cw721Contract<Q: CustomMsg, E: CustomMsg>(
-    pub Addr,
-    pub PhantomData<Q>,
-    pub PhantomData<E>,
-);
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Cw721Contract(pub Addr);
 
 #[allow(dead_code)]
-impl<Q: CustomMsg, E: CustomMsg> Cw721Contract<Q, E> {
+impl Cw721Contract {
     pub fn addr(&self) -> Addr {
         self.0.clone()
     }
 
-    pub fn call<T: Serialize>(&self, msg: ExecuteMsg<T, E>) -> StdResult<CosmosMsg> {
+    pub fn call<T: Serialize>(&self, msg: ExecuteMsg<T>) -> StdResult<CosmosMsg> {
         let msg = to_binary(&msg)?;
         Ok(WasmMsg::Execute {
             contract_addr: self.addr().into(),
@@ -39,7 +29,7 @@ impl<Q: CustomMsg, E: CustomMsg> Cw721Contract<Q, E> {
     pub fn query<T: DeserializeOwned>(
         &self,
         querier: &QuerierWrapper,
-        req: QueryMsg<Q>,
+        req: QueryMsg,
     ) -> StdResult<T> {
         let query = WasmQuery::Smart {
             contract_addr: self.addr().into(),

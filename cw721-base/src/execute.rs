@@ -1,25 +1,25 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use cosmwasm_std::{Binary, CustomMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 
 use cw2::set_contract_version;
-use cw721::{ContractInfoResponse, Cw721Execute, Cw721ReceiveMsg, Expiration};
+use cw721::{ContractInfoResponse, CustomMsg, Cw721Execute, Cw721ReceiveMsg, Expiration};
+use cw_storage_plus::Item;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg};
+use crate::{get_all_image, mat_to_base64, NftImage};
 use crate::state::{Approval, Cw721Contract, TokenInfo};
 
-// Version info for migration
+// version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cw721-base";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
     C: CustomMsg,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     pub fn instantiate(
         &self,
@@ -34,6 +34,8 @@ where
             name: msg.name,
             symbol: msg.symbol,
         };
+
+        self.images.save(deps.storage,&Vec::new())?;
         self.contract_info.save(deps.storage, &info)?;
         let minter = deps.api.addr_validate(&msg.minter)?;
         self.minter.save(deps.storage, &minter)?;
@@ -45,7 +47,7 @@ where
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        msg: ExecuteMsg<T, E>,
+        msg: ExecuteMsg<T>,
     ) -> Result<Response<C>, ContractError> {
         match msg {
             ExecuteMsg::Mint(msg) => self.mint(deps, env, info, msg),
@@ -71,41 +73,58 @@ where
                 msg,
             } => self.send_nft(deps, env, info, contract, token_id, msg),
             ExecuteMsg::Burn { token_id } => self.burn(deps, env, info, token_id),
-            ExecuteMsg::Extension { msg: _ } => Ok(Response::default()),
         }
     }
 }
 
 // TODO pull this into some sort of trait extension??
-impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
     C: CustomMsg,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     pub fn mint(
         &self,
         deps: DepsMut,
         _env: Env,
         info: MessageInfo,
-        msg: MintMsg<T>,
+        mut msg: MintMsg<T>,
     ) -> Result<Response<C>, ContractError> {
         let minter = self.minter.load(deps.storage)?;
+
+        let mut images =self.images.load(deps.storage)?;
+        let mut nft_image=NftImage::new();
+
+        // 'out:loop{
+        //     for i in 0..images.len(){
+        //         if images[i]==nft_image {
+        //             nft_image=NftImage::new();
+        //             break;
+        //         }
+        //         else if i==images.len()-1{
+        //             images.push(nft_image);
+        //             break 'out;
+        //         }
+        //     }
+        // }
+        self.images.save(deps.storage,&images)?;
 
         if info.sender != minter {
             return Err(ContractError::Unauthorized {});
         }
+        let nft_mat=get_all_image(&nft_image);
+        let nft_base64=mat_to_base64(&nft_mat);
 
         // create the token
         let token = TokenInfo {
             owner: deps.api.addr_validate(&msg.owner)?,
             approvals: vec![],
-            token_uri: msg.token_uri,
+            token_uri: Some(nft_base64),
             extension: msg.extension,
         };
+        let token_id=images.len().to_string();
         self.tokens
-            .update(deps.storage, &msg.token_id, |old| match old {
+            .update(deps.storage, &token_id, |old| match old {
                 Some(_) => Err(ContractError::Claimed {}),
                 None => Ok(token),
             })?;
@@ -114,18 +133,15 @@ where
 
         Ok(Response::new()
             .add_attribute("action", "mint")
-            .add_attribute("minter", info.sender)
-            .add_attribute("owner", msg.owner)
-            .add_attribute("token_id", msg.token_id))
+            .add_attribute("minter", info.sender))
+            .add_attribute("token_id", token_id)
     }
 }
 
-impl<'a, T, C, E, Q> Cw721Execute<T, C> for Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721Execute<T, C> for Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
     C: CustomMsg,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     type Err = ContractError;
 
@@ -271,12 +287,10 @@ where
 }
 
 // helpers
-impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
     C: CustomMsg,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     pub fn _transfer_nft(
         &self,
@@ -314,7 +328,11 @@ where
 
         // update the approval list (remove any for the same spender before adding)
         let spender_addr = deps.api.addr_validate(spender)?;
-        token.approvals.retain(|apr| apr.spender != spender_addr);
+        token.approvals = token
+            .approvals
+            .into_iter()
+            .filter(|apr| apr.spender != spender_addr)
+            .collect();
 
         // only difference between approve and revoke
         if add {

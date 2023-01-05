@@ -3,16 +3,15 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use cosmwasm_std::{Addr, BlockInfo, CustomMsg, StdResult, Storage};
+use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage};
 
-use cw721::{ContractInfoResponse, Cw721, Expiration};
+use cw721::{ContractInfoResponse, CustomMsg, Cw721, Expiration};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
+use crate::NftImage;
 
-pub struct Cw721Contract<'a, T, C, E, Q>
+pub struct Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
-    Q: CustomMsg,
-    E: CustomMsg,
 {
     pub contract_info: Item<'a, ContractInfoResponse>,
     pub minter: Item<'a, Addr>,
@@ -21,26 +20,22 @@ where
     pub operators: Map<'a, (&'a Addr, &'a Addr), Expiration>,
     pub tokens: IndexedMap<'a, &'a str, TokenInfo<T>, TokenIndexes<'a, T>>,
 
+    pub images: Item<'a,Vec<NftImage>>,
+
     pub(crate) _custom_response: PhantomData<C>,
-    pub(crate) _custom_query: PhantomData<Q>,
-    pub(crate) _custom_execute: PhantomData<E>,
 }
 
 // This is a signal, the implementations are in other files
-impl<'a, T, C, E, Q> Cw721<T, C> for Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721<T, C> for Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
     C: CustomMsg,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
 }
 
-impl<T, C, E, Q> Default for Cw721Contract<'static, T, C, E, Q>
+impl<T, C> Default for Cw721Contract<'static, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     fn default() -> Self {
         Self::new(
@@ -50,15 +45,14 @@ where
             "operators",
             "tokens",
             "tokens__owner",
+            "images"
         )
     }
 }
 
-impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
+impl<'a, T, C> Cw721Contract<'a, T, C>
 where
     T: Serialize + DeserializeOwned + Clone,
-    E: CustomMsg,
-    Q: CustomMsg,
 {
     fn new(
         contract_key: &'a str,
@@ -67,6 +61,7 @@ where
         operator_key: &'a str,
         tokens_key: &'a str,
         tokens_owner_key: &'a str,
+        images_key:&'a str,
     ) -> Self {
         let indexes = TokenIndexes {
             owner: MultiIndex::new(token_owner_idx, tokens_key, tokens_owner_key),
@@ -77,9 +72,8 @@ where
             token_count: Item::new(token_count_key),
             operators: Map::new(operator_key),
             tokens: IndexedMap::new(tokens_key, indexes),
+            images: Item::new(images_key),
             _custom_response: PhantomData,
-            _custom_execute: PhantomData,
-            _custom_query: PhantomData,
         }
     }
 
@@ -134,7 +128,7 @@ pub struct TokenIndexes<'a, T>
 where
     T: Serialize + DeserializeOwned + Clone,
 {
-    pub owner: MultiIndex<'a, Addr, TokenInfo<T>, String>,
+    pub owner: MultiIndex<'a, Addr, TokenInfo<T>, Addr>,
 }
 
 impl<'a, T> IndexList<TokenInfo<T>> for TokenIndexes<'a, T>
@@ -147,6 +141,6 @@ where
     }
 }
 
-pub fn token_owner_idx<T>(_pk: &[u8], d: &TokenInfo<T>) -> Addr {
+pub fn token_owner_idx<T>(d: &TokenInfo<T>) -> Addr {
     d.owner.clone()
 }

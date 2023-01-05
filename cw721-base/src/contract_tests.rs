@@ -7,15 +7,13 @@ use cw721::{
     NftInfoResponse, OperatorsResponse, OwnerOfResponse,
 };
 
-use crate::{
-    ContractError, Cw721Contract, ExecuteMsg, Extension, InstantiateMsg, MintMsg, QueryMsg,
-};
+use crate::{ContractError, Cw721Contract, ExecuteMsg, Extension, InstantiateMsg, MintMsg, NftImage, QueryMsg};
 
 const MINTER: &str = "merlin";
 const CONTRACT_NAME: &str = "Magic Power";
 const SYMBOL: &str = "MGK";
 
-fn setup_contract(deps: DepsMut<'_>) -> Cw721Contract<'static, Extension, Empty, Empty, Empty> {
+fn setup_contract(deps: DepsMut<'_>) -> Cw721Contract<'static, Extension, Empty> {
     let contract = Cw721Contract::default();
     let msg = InstantiateMsg {
         name: CONTRACT_NAME.to_string(),
@@ -29,9 +27,14 @@ fn setup_contract(deps: DepsMut<'_>) -> Cw721Contract<'static, Extension, Empty,
 }
 
 #[test]
+fn nft_image_test(){
+    NftImage::new();
+}
+
+#[test]
 fn proper_instantiation() {
     let mut deps = mock_dependencies();
-    let contract = Cw721Contract::<Extension, Empty, Empty, Empty>::default();
+    let contract = Cw721Contract::<Extension, Empty>::default();
 
     let msg = InstantiateMsg {
         name: CONTRACT_NAME.to_string(),
@@ -144,6 +147,29 @@ fn minting() {
     assert_eq!(1, tokens.tokens.len());
     assert_eq!(vec![token_id], tokens.tokens);
 }
+
+fn minting_custom(){
+    let mut deps = mock_dependencies();
+    let contract = setup_contract(deps.as_mut());
+
+    let token_id = "petrify".to_string();
+    let token_uri = "https://www.merriam-webster.com/dictionary/petrify".to_string();
+
+    let allowed = mock_info(MINTER, &[]);
+
+    let mint_msg = ExecuteMsg::Mint(MintMsg::<Extension> {
+        token_id: token_id.clone(),
+        owner: String::from("medusa"),
+        token_uri: Some(token_uri.clone()),
+        extension: None,
+    });
+
+    contract.execute(deps.as_mut(), mock_env(), allowed, mint_msg)
+        .unwrap();
+}
+
+#[test]
+fn minting_name(){}
 
 #[test]
 fn burning() {
@@ -681,9 +707,9 @@ fn query_tokens_by_owner() {
 
     // Mint a couple tokens (from the same owner)
     let token_id1 = "grow1".to_string();
-    let demeter = String::from("demeter");
+    let demeter = String::from("Demeter");
     let token_id2 = "grow2".to_string();
-    let ceres = String::from("ceres");
+    let ceres = String::from("Ceres");
     let token_id3 = "sing".to_string();
 
     let mint_msg = ExecuteMsg::Mint(MintMsg::<Extension> {
