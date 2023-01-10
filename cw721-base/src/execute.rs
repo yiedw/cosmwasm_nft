@@ -5,11 +5,12 @@ use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult}
 
 use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, CustomMsg, Cw721Execute, Cw721ReceiveMsg, Expiration};
-use cw_storage_plus::Item;
+// #[warn(unused_imports)]
+// use cw_storage_plus::Item;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg};
-use crate::{get_all_image, mat_to_base64, NftImage};
+use crate::{get_nft_image, mat_to_base64, NftImage};
 use crate::state::{Approval, Cw721Contract, TokenInfo};
 
 // version info for migration info
@@ -17,9 +18,9 @@ const CONTRACT_NAME: &str = "crates.io:cw721-base";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 impl<'a, T, C> Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
-    C: CustomMsg,
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        C: CustomMsg,
 {
     pub fn instantiate(
         &self,
@@ -35,7 +36,7 @@ where
             symbol: msg.symbol,
         };
 
-        self.images.save(deps.storage,&Vec::new())?;
+        self.images.save(deps.storage, &Vec::new())?;
         self.contract_info.save(deps.storage, &info)?;
         let minter = deps.api.addr_validate(&msg.minter)?;
         self.minter.save(deps.storage, &minter)?;
@@ -79,41 +80,55 @@ where
 
 // TODO pull this into some sort of trait extension??
 impl<'a, T, C> Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
-    C: CustomMsg,
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        C: CustomMsg,
 {
     pub fn mint(
         &self,
         deps: DepsMut,
         _env: Env,
         info: MessageInfo,
-        mut msg: MintMsg<T>,
+        msg: MintMsg<T>,
     ) -> Result<Response<C>, ContractError> {
         let minter = self.minter.load(deps.storage)?;
-
-        let mut images =self.images.load(deps.storage)?;
-        let mut nft_image=NftImage::new();
-
-        // 'out:loop{
-        //     for i in 0..images.len(){
-        //         if images[i]==nft_image {
-        //             nft_image=NftImage::new();
-        //             break;
-        //         }
-        //         else if i==images.len()-1{
-        //             images.push(nft_image);
-        //             break 'out;
-        //         }
-        //     }
-        // }
-        self.images.save(deps.storage,&images)?;
-
         if info.sender != minter {
             return Err(ContractError::Unauthorized {});
         }
-        let nft_mat=get_all_image(&nft_image);
-        let nft_base64=mat_to_base64(&nft_mat);
+
+        let mut images = self.images.load(deps.storage)?;
+        let mut nft_image = NftImage::new();
+        // 같은 이미지일때 테스트
+        // let mut nft_image = NftImage{
+        //     acc: 1,
+        //     beard: 1,
+        //     ears: 1,
+        //     eyes: 1,
+        //     face: 1,
+        //     hair: 1,
+        //     mouth:1,
+        //     nose: 1,
+        // };
+
+        if images.is_empty() {
+            images.push(nft_image);
+        } else {
+            'out: loop {
+                for i in 0..images.len() {
+                    if images[i] == nft_image {
+                        nft_image = NftImage::new();
+                        break;
+                    } else if i == images.len() - 1 {
+                        images.push(nft_image);
+                        break 'out;
+                    }
+                }
+            }
+        }
+        self.images.save(deps.storage, &images)?;
+
+        let nft_mat = get_nft_image(&nft_image);
+        let nft_base64 = mat_to_base64(&nft_mat);
 
         // create the token
         let token = TokenInfo {
@@ -122,7 +137,7 @@ where
             token_uri: Some(nft_base64),
             extension: msg.extension,
         };
-        let token_id=images.len().to_string();
+        let token_id = images.len().to_string();
         self.tokens
             .update(deps.storage, &token_id, |old| match old {
                 Some(_) => Err(ContractError::Claimed {}),
@@ -133,15 +148,16 @@ where
 
         Ok(Response::new()
             .add_attribute("action", "mint")
-            .add_attribute("minter", info.sender))
-            .add_attribute("token_id", token_id)
+            .add_attribute("minter", info.sender)
+            .add_attribute("owner", msg.owner)
+            .add_attribute("token_id", token_id))
     }
 }
 
 impl<'a, T, C> Cw721Execute<T, C> for Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
-    C: CustomMsg,
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        C: CustomMsg,
 {
     type Err = ContractError;
 
@@ -288,9 +304,9 @@ where
 
 // helpers
 impl<'a, T, C> Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
-    C: CustomMsg,
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        C: CustomMsg,
 {
     pub fn _transfer_nft(
         &self,

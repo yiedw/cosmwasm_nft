@@ -84,6 +84,7 @@ where
     pub fn increment_tokens(&self, storage: &mut dyn Storage) -> StdResult<u64> {
         let val = self.token_count(storage)? + 1;
         self.token_count.save(storage, &val)?;
+        // println!("{:?}",val);
         Ok(val)
     }
 

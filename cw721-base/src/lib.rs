@@ -6,17 +6,14 @@ pub mod msg;
 mod query;
 pub mod state;
 
-use std::ops::Add;
-use image::io::Reader as ImageReader;
-
 use serde::{Deserialize, Serialize};
 pub use crate::error::ContractError;
 pub use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg, MinterResponse, QueryMsg};
 pub use crate::state::Cw721Contract;
 use cosmwasm_std::Empty;
-use opencv::core::{add, add_weighted, bitwise_and, bitwise_not, bitwise_or, Mat, MatTraitConstManual, no_array, Vector};
-use opencv::imgcodecs::{imencode, imread, IMREAD_COLOR, IMREAD_UNCHANGED, IMWRITE_PNG_COMPRESSION};
-use opencv::imgproc::{COLOR_BGRA2GRAY, COLOR_GRAY2BGR, COLOR_GRAY2BGRA, cvt_color, put_text, THRESH_BINARY_INV, threshold};
+use opencv::core::{ add_weighted, bitwise_and, Mat, no_array, Vector};
+use opencv::imgcodecs::{imencode, imread, IMREAD_UNCHANGED, IMWRITE_PNG_COMPRESSION};
+use opencv::imgproc::{COLOR_BGRA2GRAY, COLOR_GRAY2BGRA, cvt_color, THRESH_BINARY_INV, threshold};
 
 use rand::distributions::WeightedIndex;
 use rand::{thread_rng};
@@ -27,7 +24,7 @@ use crate::ImageType::{ACC, BEARD, EARS, EYES, FACE, HAIR, MOUTH, NOSE};
 // This is a simple type to let us handle empty extensions
 pub type Extension = Option<Empty>;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq,Copy, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Copy, JsonSchema)]
 pub struct NftImage {
     acc: u8,
     beard: u8,
@@ -49,7 +46,6 @@ enum ImageType {
     MOUTH,
     NOSE,
 }
-
 impl NftImage {
     /// acc (2)
     /// beard (4)
@@ -70,9 +66,26 @@ impl NftImage {
             mouth: random_num(ImageType::MOUTH),
             nose: random_num(ImageType::NOSE),
         }
-
     }
 }
+
+impl<'a, 'b> PartialEq for NftImage {
+    fn eq(&self, other: &Self) -> bool {
+        if
+        self.eyes == other.eyes
+            && self.acc == other.acc
+            && self.face == other.face
+            && self.beard == other.beard
+            && self.hair == other.hair
+            && self.ears == other.ears
+            && self.mouth == other.mouth
+            && self.nose == other.nose {
+            return true;
+        }
+        false
+    }
+}
+
 
 // 이미지 합성
 fn alpha_composite(background_image: &Mat, overlay_image: Mat) -> Mat {
@@ -164,90 +177,78 @@ fn random_num(nft_image_type: ImageType) -> u8 {
     ];
     let type_arr: [Vec<(u8, u8)>; 8] = [Vec::from(acc_arr), Vec::from(beard_arr), Vec::from(ears_arr), Vec::from(eyes_arr), Vec::from(face_arr)
         , Vec::from(hair_arr), Vec::from(mouse_arr), Vec::from(nose_arr)];
-    let mut type_code = 0;
-    let mut num = 0u8;
 
     match nft_image_type {
         ImageType::ACC => {
-            type_code = 0;
+            let type_code = 0;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::BEARD => {
-            type_code = 1;
+            let type_code = 1;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::EARS => {
-            type_code = 2;
+            let type_code = 2;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::EYES => {
-            type_code = 3;
+            let type_code = 3;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::FACE => {
-            type_code = 4;
+            let type_code = 4;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::HAIR => {
-            type_code = 5;
+            let type_code = 5;
             // println!("{:?}",type_arr[type_code].iter().map(|item| item.1));
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::MOUTH => {
-            type_code = 6;
+            let  type_code = 6;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
         ImageType::NOSE => {
-            type_code = 7;
+            let type_code = 7;
             let dist = WeightedIndex::new(type_arr[type_code].iter().map(|item| item.1)).unwrap();
-            num = type_arr[type_code][dist.sample(&mut thread_rng())].0;
+            type_arr[type_code][dist.sample(&mut thread_rng())].0
         }
     }
-    num
 }
 
 fn get_image(image_type: ImageType, num: u8) -> Mat {
-    let mut type_code = 0;
     let mut path = "./images/face_parts".to_string();
 
     match image_type {
         ImageType::ACC => {
-            type_code = 0;
             path = path.to_owned() + "/access/acc";
         }
         ImageType::BEARD => {
-            type_code = 1;
             path = path.to_owned() + "/beard/beard";
         }
         ImageType::EARS => {
-            type_code = 2;
             path = path.to_owned() + "/ears/ears";
         }
         ImageType::EYES => {
-            type_code = 3;
             path = path.to_owned() + "/eyes/eyes";
         }
         ImageType::FACE => {
-            type_code = 4;
             path = path.to_owned() + "/face/face";
         }
         ImageType::HAIR => {
-            type_code = 5;
             path = path.to_owned() + "/hair/hair";
         }
         ImageType::MOUTH => {
-            type_code = 6;
             path = path.to_owned() + "/mouth/m";
         }
         ImageType::NOSE => {
-            type_code = 7;
             path = path.to_owned() + "/nose/n";
         }
     }
@@ -256,25 +257,24 @@ fn get_image(image_type: ImageType, num: u8) -> Mat {
     imread(&path, IMREAD_UNCHANGED).unwrap()
 }
 
-fn get_all_image(nft_image:&NftImage)->Mat{
-    let face=get_image(FACE,nft_image.face);
-    let eyes=get_image(EYES,nft_image.eyes);
-    let nose=get_image(NOSE,nft_image.nose);
-    let mouth=get_image(MOUTH,nft_image.mouth);
-    let ears=get_image(EARS,nft_image.ears);
-    let hair=get_image(HAIR,nft_image.hair);
-    let beard=get_image(BEARD,nft_image.beard);
-    let acc=get_image(ACC,nft_image.acc);
-    let mut image=Mat::default();
-    image = alpha_composite(&face, eyes);
-    image=alpha_composite(&image,nose);
-    image=alpha_composite(&image,mouth);
-    image=alpha_composite(&image,ears);
-    image=alpha_composite(&image,hair);
-    image=alpha_composite(&image,beard);
-    alpha_composite(&image,acc)
-}
+fn get_nft_image(nft_image: &NftImage) -> Mat {
+    let face = get_image(FACE, nft_image.face);
+    let eyes = get_image(EYES, nft_image.eyes);
+    let nose = get_image(NOSE, nft_image.nose);
+    let mouth = get_image(MOUTH, nft_image.mouth);
+    let ears = get_image(EARS, nft_image.ears);
+    let hair = get_image(HAIR, nft_image.hair);
+    let beard = get_image(BEARD, nft_image.beard);
+    let acc = get_image(ACC, nft_image.acc);
 
+    let image = alpha_composite(&face, eyes);
+    let image = alpha_composite(&image, nose);
+    let image = alpha_composite(&image, mouth);
+    let image = alpha_composite(&image, ears);
+    let image = alpha_composite(&image, hair);
+    let image = alpha_composite(&image, beard);
+    alpha_composite(&image, acc)
+}
 
 
 #[warn(dead_code)]
