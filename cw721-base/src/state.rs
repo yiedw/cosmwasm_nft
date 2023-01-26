@@ -3,15 +3,17 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage};
+use cosmwasm_std::{Addr, BlockInfo, CustomMsg, StdResult, Storage};
 
-use cw721::{ContractInfoResponse, CustomMsg, Cw721, Expiration};
+use cw721::{ContractInfoResponse, Cw721, Expiration};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 use crate::NftImage;
 
-pub struct Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
+pub struct Cw721Contract<'a, T, C, E, Q>
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        Q: CustomMsg,
+        E: CustomMsg,
 {
     pub contract_info: Item<'a, ContractInfoResponse>,
     pub minter: Item<'a, Addr>,
@@ -19,23 +21,29 @@ where
     /// Stored as (granter, operator) giving operator full control over granter's account
     pub operators: Map<'a, (&'a Addr, &'a Addr), Expiration>,
     pub tokens: IndexedMap<'a, &'a str, TokenInfo<T>, TokenIndexes<'a, T>>,
-
-    pub images: Item<'a,Vec<NftImage>>,
+    pub images: Item<'a, Vec<NftImage>>,
 
     pub(crate) _custom_response: PhantomData<C>,
+    pub(crate) _custom_query: PhantomData<Q>,
+    pub(crate) _custom_execute: PhantomData<E>,
 }
 
 // This is a signal, the implementations are in other files
-impl<'a, T, C> Cw721<T, C> for Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
-    C: CustomMsg,
+impl<'a, T, C, E, Q> Cw721<T, C> for Cw721Contract<'a, T, C, E, Q>
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        C: CustomMsg,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
+
 }
 
-impl<T, C> Default for Cw721Contract<'static, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
+impl<T, C, E, Q> Default for Cw721Contract<'static, T, C, E, Q>
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     fn default() -> Self {
         Self::new(
@@ -45,14 +53,16 @@ where
             "operators",
             "tokens",
             "tokens__owner",
-            "images"
+            "images",
         )
     }
 }
 
-impl<'a, T, C> Cw721Contract<'a, T, C>
-where
-    T: Serialize + DeserializeOwned + Clone,
+impl<'a, T, C,E,Q> Cw721Contract<'a, T, C, E, Q>
+    where
+        T: Serialize + DeserializeOwned + Clone,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     fn new(
         contract_key: &'a str,
@@ -61,7 +71,7 @@ where
         operator_key: &'a str,
         tokens_key: &'a str,
         tokens_owner_key: &'a str,
-        images_key:&'a str,
+        images_key: &'a str,
     ) -> Self {
         let indexes = TokenIndexes {
             owner: MultiIndex::new(token_owner_idx, tokens_key, tokens_owner_key),
@@ -74,6 +84,8 @@ where
             tokens: IndexedMap::new(tokens_key, indexes),
             images: Item::new(images_key),
             _custom_response: PhantomData,
+            _custom_query: Default::default(),
+            _custom_execute: Default::default(),
         }
     }
 
@@ -84,7 +96,6 @@ where
     pub fn increment_tokens(&self, storage: &mut dyn Storage) -> StdResult<u64> {
         let val = self.token_count(storage)? + 1;
         self.token_count.save(storage, &val)?;
-        // println!("{:?}",val);
         Ok(val)
     }
 
@@ -94,6 +105,7 @@ where
         Ok(val)
     }
 }
+
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TokenInfo<T> {
@@ -126,22 +138,22 @@ impl Approval {
 }
 
 pub struct TokenIndexes<'a, T>
-where
-    T: Serialize + DeserializeOwned + Clone,
+    where
+        T: Serialize + DeserializeOwned + Clone,
 {
-    pub owner: MultiIndex<'a, Addr, TokenInfo<T>, Addr>,
+    pub owner: MultiIndex<'a, Addr, TokenInfo<T>, String>,
 }
 
 impl<'a, T> IndexList<TokenInfo<T>> for TokenIndexes<'a, T>
-where
-    T: Serialize + DeserializeOwned + Clone,
+    where
+        T: Serialize + DeserializeOwned + Clone,
 {
-    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<TokenInfo<T>>> + '_> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item=&'_ dyn Index<TokenInfo<T>>> + '_> {
         let v: Vec<&dyn Index<TokenInfo<T>>> = vec![&self.owner];
         Box::new(v.into_iter())
     }
 }
 
-pub fn token_owner_idx<T>(d: &TokenInfo<T>) -> Addr {
+pub fn token_owner_idx<T>(_pk: &[u8], d: &TokenInfo<T>) -> Addr {
     d.owner.clone()
 }

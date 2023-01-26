@@ -1,10 +1,10 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{Binary, CustomMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 
 use cw2::set_contract_version;
-use cw721::{ContractInfoResponse, CustomMsg, Cw721Execute, Cw721ReceiveMsg, Expiration};
+use cw721::{ContractInfoResponse, Cw721Execute, Cw721ReceiveMsg, Expiration};
 // #[warn(unused_imports)]
 // use cw_storage_plus::Item;
 
@@ -17,10 +17,12 @@ use crate::state::{Approval, Cw721Contract, TokenInfo};
 const CONTRACT_NAME: &str = "crates.io:cw721-base";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-impl<'a, T, C> Cw721Contract<'a, T, C>
+impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
     where
         T: Serialize + DeserializeOwned + Clone,
         C: CustomMsg,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     pub fn instantiate(
         &self,
@@ -48,7 +50,7 @@ impl<'a, T, C> Cw721Contract<'a, T, C>
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        msg: ExecuteMsg<T>,
+        msg: ExecuteMsg<T, E>,
     ) -> Result<Response<C>, ContractError> {
         match msg {
             ExecuteMsg::Mint(msg) => self.mint(deps, env, info, msg),
@@ -74,15 +76,18 @@ impl<'a, T, C> Cw721Contract<'a, T, C>
                 msg,
             } => self.send_nft(deps, env, info, contract, token_id, msg),
             ExecuteMsg::Burn { token_id } => self.burn(deps, env, info, token_id),
+            ExecuteMsg::Extension { msg: _ } => Ok(Response::default()),
         }
     }
 }
 
 // TODO pull this into some sort of trait extension??
-impl<'a, T, C> Cw721Contract<'a, T, C>
+impl<'a, T, C,E,Q> Cw721Contract<'a, T, C, E, Q>
     where
         T: Serialize + DeserializeOwned + Clone,
         C: CustomMsg,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     pub fn mint(
         &self,
@@ -154,10 +159,12 @@ impl<'a, T, C> Cw721Contract<'a, T, C>
     }
 }
 
-impl<'a, T, C> Cw721Execute<T, C> for Cw721Contract<'a, T, C>
+impl<'a, T, C, E, Q> Cw721Execute<T, C> for Cw721Contract<'a, T, C, E, Q>
     where
         T: Serialize + DeserializeOwned + Clone,
         C: CustomMsg,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     type Err = ContractError;
 
@@ -303,10 +310,12 @@ impl<'a, T, C> Cw721Execute<T, C> for Cw721Contract<'a, T, C>
 }
 
 // helpers
-impl<'a, T, C> Cw721Contract<'a, T, C>
+impl<'a, T, C, E, Q> Cw721Contract<'a, T, C, E, Q>
     where
         T: Serialize + DeserializeOwned + Clone,
         C: CustomMsg,
+        E: CustomMsg,
+        Q: CustomMsg,
 {
     pub fn _transfer_nft(
         &self,
