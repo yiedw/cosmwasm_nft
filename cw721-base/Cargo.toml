@@ -62,11 +62,13 @@ version = "0.8.5"
 [dependencies.base64]
 version = "0.21.0"
 
-[dependencies.opencv]
-version = "0.70"
+# archway build 시 에러발생
+#[dependencies.opencv]
+#version = "0.70"
 
-[dependencies.numpy]
-version = "0.18.0"
+# archway build 시 에러발생
+#[dependencies.numpy]
+#version = "0.17.2"
 
 [features]
 backtraces = ["cosmwasm-std/backtraces"]

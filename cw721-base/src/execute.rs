@@ -10,7 +10,7 @@ use cw721::{ContractInfoResponse, Cw721Execute, Cw721ReceiveMsg, Expiration};
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg};
-use crate::{get_nft_image, mat_to_base64, NftImage};
+use crate::{get_nft_image, NftImage, rgba_to_base64};
 use crate::state::{Approval, Cw721Contract, TokenInfo};
 
 // version info for migration info
@@ -132,9 +132,9 @@ impl<'a, T, C,E,Q> Cw721Contract<'a, T, C, E, Q>
         }
         self.images.save(deps.storage, &images)?;
 
-        let nft_mat = get_nft_image(&nft_image);
-        let nft_base64 = mat_to_base64(&nft_mat);
-
+        let nft_rgba = get_nft_image(&nft_image);
+        let nft_base64 = rgba_to_base64(nft_rgba);
+        // println!("{}",msg.owner);
         // create the token
         let token = TokenInfo {
             owner: deps.api.addr_validate(&msg.owner)?,
@@ -150,7 +150,6 @@ impl<'a, T, C,E,Q> Cw721Contract<'a, T, C, E, Q>
             })?;
 
         self.increment_tokens(deps.storage)?;
-
         Ok(Response::new()
             .add_attribute("action", "mint")
             .add_attribute("minter", info.sender)

@@ -6,14 +6,16 @@ pub mod msg;
 mod query;
 pub mod state;
 
+use std::io::Cursor;
 use serde::{Deserialize, Serialize};
 pub use crate::error::ContractError;
 pub use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg, MinterResponse, QueryMsg};
 pub use crate::state::Cw721Contract;
 use cosmwasm_std::Empty;
-use opencv::core::{ add_weighted, bitwise_and, Mat, no_array, Vector};
-use opencv::imgcodecs::{imencode, imread, IMREAD_UNCHANGED, IMWRITE_PNG_COMPRESSION};
-use opencv::imgproc::{COLOR_BGRA2GRAY, COLOR_GRAY2BGRA, cvt_color, THRESH_BINARY_INV, threshold};
+use image::{DynamicImage, open, RgbaImage};
+// use opencv::core::{ add_weighted, bitwise_and, Mat, no_array, Vector};
+// use opencv::imgcodecs::{imencode, imread, IMREAD_UNCHANGED, IMWRITE_PNG_COMPRESSION};
+// use opencv::imgproc::{COLOR_BGRA2GRAY, COLOR_GRAY2BGRA, cvt_color, THRESH_BINARY_INV, threshold};
 
 use rand::distributions::WeightedIndex;
 use rand::{thread_rng};
@@ -87,37 +89,56 @@ impl<'a, 'b> PartialEq for NftImage {
 }
 
 
-// 이미지 합성
-fn alpha_composite(background_image: &Mat, overlay_image: Mat) -> Mat {
+// overlay test
+#[test]
+fn ex(){
+    let mut face_image = open("./images/face_parts/face/face1.png").unwrap().to_rgba8();
+    let acc_image = open("./images/face_parts/access/acc2.png").unwrap().to_rgba8();
+    image::imageops::overlay(&mut face_image, &acc_image, 0, 0);
+    println!("{:?}", rgba_to_base64(face_image));
 
-    // GRAYSCALE 타입으로 변경
-    let mut overlay_image_gray = Mat::default();
-    cvt_color(&overlay_image, &mut overlay_image_gray, COLOR_BGRA2GRAY, 0).unwrap();
-    // println!("{:?}",mat_to_base64(&overlay_image_gray));
-
-    // 이미지 흑백처리
-    let mut overlay_image_mask_gray = Mat::default();
-    threshold(&overlay_image_gray, &mut overlay_image_mask_gray, 1.0, 255.0, THRESH_BINARY_INV).unwrap();
-    // println!("{:?}",mat_to_base64(&overlay_image_mask_gray));
-
-    // BGRA 타입으로 다시 변경
-    let mut overlay_image_mask = Mat::default();
-    cvt_color(&overlay_image_mask_gray, &mut overlay_image_mask, COLOR_GRAY2BGRA, 0).unwrap();
-
-    // 배경과 흑백처리된 오버레이 이미지 합성
-    let mut background_image_bg = Mat::default();
-    bitwise_and(background_image, &overlay_image_mask, &mut background_image_bg, &no_array()).unwrap();
-    // println!("{:?}",mat_to_base64(&background_image_bg));
-
-    // 최종본
-    let mut result = Mat::default();
-    add_weighted(&background_image_bg, 0.95, &overlay_image, 1.0, -10.0, &mut result, 0).unwrap();
-    // if weighted_check {
-    // } else {
-    //     add(&background_image_bg, overlay_image, &mut result, &no_array(), 0).unwrap();
-    // };
-    result
 }
+
+fn rgba_to_base64(image:RgbaImage) -> String{
+    let dynamic_image :DynamicImage= DynamicImage::ImageRgba8(image);
+    let mut bytes = Vec::new();
+    dynamic_image.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png).unwrap();
+    let res_base64 = base64::encode(&bytes);
+    format!("data:image/png;base64,{}", res_base64)
+}
+
+
+// 이미지 합성
+// fn alpha_composite(background_image: &Mat, overlay_image: Mat) -> Mat {
+//
+//     // GRAYSCALE 타입으로 변경
+//     let mut overlay_image_gray = Mat::default();
+//     cvt_color(&overlay_image, &mut overlay_image_gray, COLOR_BGRA2GRAY, 0).unwrap();
+//     // println!("{:?}",mat_to_base64(&overlay_image_gray));
+//
+//     // 이미지 흑백처리
+//     let mut overlay_image_mask_gray = Mat::default();
+//     threshold(&overlay_image_gray, &mut overlay_image_mask_gray, 1.0, 255.0, THRESH_BINARY_INV).unwrap();
+//     // println!("{:?}",mat_to_base64(&overlay_image_mask_gray));
+//
+//     // BGRA 타입으로 다시 변경
+//     let mut overlay_image_mask = Mat::default();
+//     cvt_color(&overlay_image_mask_gray, &mut overlay_image_mask, COLOR_GRAY2BGRA, 0).unwrap();
+//
+//     // 배경과 흑백처리된 오버레이 이미지 합성
+//     let mut background_image_bg = Mat::default();
+//     bitwise_and(background_image, &overlay_image_mask, &mut background_image_bg, &no_array()).unwrap();
+//     // println!("{:?}",mat_to_base64(&background_image_bg));
+//
+//     // 최종본
+//     let mut result = Mat::default();
+//     add_weighted(&background_image_bg, 0.95, &overlay_image, 1.0, -10.0, &mut result, 0).unwrap();
+//     // if weighted_check {
+//     // } else {
+//     //     add(&background_image_bg, overlay_image, &mut result, &no_array(), 0).unwrap();
+//     // };
+//     result
+// }
 
 // 랜덤 이미지 리턴
 #[warn(unused_mut)]
@@ -223,7 +244,7 @@ fn random_num(nft_image_type: ImageType) -> u8 {
     }
 }
 
-fn get_image(image_type: ImageType, num: u8) -> Mat {
+fn get_image(image_type: ImageType, num: u8) -> RgbaImage {
     let mut path = "./images/face_parts".to_string();
 
     match image_type {
@@ -254,11 +275,11 @@ fn get_image(image_type: ImageType, num: u8) -> Mat {
     }
     path = path.to_owned() + &num.to_string() + ".png";
     // println!("{}",path);
-    imread(&path, IMREAD_UNCHANGED).unwrap()
+    open(&path).unwrap().to_rgba8()
 }
 
-fn get_nft_image(nft_image: &NftImage) -> Mat {
-    let face = get_image(FACE, nft_image.face);
+fn get_nft_image(nft_image: &NftImage) -> RgbaImage {
+    let mut face = get_image(FACE, nft_image.face);
     let eyes = get_image(EYES, nft_image.eyes);
     let nose = get_image(NOSE, nft_image.nose);
     let mouth = get_image(MOUTH, nft_image.mouth);
@@ -266,65 +287,76 @@ fn get_nft_image(nft_image: &NftImage) -> Mat {
     let hair = get_image(HAIR, nft_image.hair);
     let beard = get_image(BEARD, nft_image.beard);
     let acc = get_image(ACC, nft_image.acc);
+    // 오버레이 순서
+    // face -> eyes -> nose -> mouth -> ears -> hair -> beard -> acc
+    image::imageops::overlay(&mut face,&eyes,0,0);
+    image::imageops::overlay(&mut face,&nose,0,0);
+    image::imageops::overlay(&mut face,&mouth,0,0);
+    image::imageops::overlay(&mut face,&ears,0,0);
+    image::imageops::overlay(&mut face,&hair,0,0);
+    image::imageops::overlay(&mut face,&beard,0,0);
+    image::imageops::overlay(&mut face,&acc,0,0);
+    face
 
-    let image = alpha_composite(&face, eyes);
-    let image = alpha_composite(&image, nose);
-    let image = alpha_composite(&image, mouth);
-    let image = alpha_composite(&image, ears);
-    let image = alpha_composite(&image, hair);
-    let image = alpha_composite(&image, beard);
-    alpha_composite(&image, acc)
+    // let image = alpha_composite(&face, eyes);
+    // let image = alpha_composite(&image, nose);
+    // let image = alpha_composite(&image, mouth);
+    // let image = alpha_composite(&image, ears);
+    // let image = alpha_composite(&image, hair);
+    // let image = alpha_composite(&image, beard);
+    // alpha_composite(&image, acc)
 }
 
 
-#[warn(dead_code)]
-fn mat_to_base64(img: &Mat) -> String {
-    let mut image_vector: Vector<u8> = Vector::new();
-    let param: Vector<i32> = Vector::from(vec![IMWRITE_PNG_COMPRESSION, 3]);
-    // println!("{:?}",img);
-    imencode(".png", img, &mut image_vector, &param).unwrap();
-    let image_vec = image_vector.to_vec();
-    // img.write_to(&mut Cursor::new(&mut image_data), ImageOutputFormat::Png)
-    //     .unwrap();
-
-
-    let res_base64: String = base64::encode(image_vec);
-    format!("data:image/png;base64,{}", res_base64)
-}
-
-// #[cfg(not(feature = "library"))]
-// pub mod entry {
-//     use super::*;
+// #[warn(dead_code)]
+// fn mat_to_base64(img: &Mat) -> String {
+//     let mut image_vector: Vector<u8> = Vector::new();
+//     let param: Vector<i32> = Vector::from(vec![IMWRITE_PNG_COMPRESSION, 3]);
+//     // println!("{:?}",img);
+//     imencode(".png", img, &mut image_vector, &param).unwrap();
+//     let image_vec = image_vector.to_vec();
+//     // img.write_to(&mut Cursor::new(&mut image_data), ImageOutputFormat::Png)
+//     //     .unwrap();
 //
-//     use cosmwasm_std::entry_point;
-//     use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 //
-//     // This makes a conscious choice on the various generics used by the contract
-//     #[entry_point]
-//     pub fn instantiate(
-//         deps: DepsMut,
-//         env: Env,
-//         info: MessageInfo,
-//         msg: InstantiateMsg,
-//     ) -> StdResult<Response> {
-//         let tract = Cw721Contract::<Extension, Empty>::default();
-//         tract.instantiate(deps, env, info, msg)
-//     }
-//
-//     #[entry_point]
-//     pub fn execute(
-//         deps: DepsMut,
-//         env: Env,
-//         info: MessageInfo,
-//         msg: ExecuteMsg<Extension>,
-//     ) -> Result<Response, ContractError> {
-//         let tract = Cw721Contract::<Extension, Empty>::default();
-//         tract.execute(deps, env, info, msg)
-//     }
-//
-//     #[entry_point]
-//     pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-//         let tract = Cw721Contract::<Extension, Empty>::default();
-//         tract.query(deps, env, msg)
-//     }
+//     let res_base64: String = base64::encode(image_vec);
+//     format!("data:image/png;base64,{}", res_base64)
 // }
+
+
+pub mod entry {
+    use super::*;
+
+    #[cfg(not(feature = "library"))]
+    use cosmwasm_std::entry_point;
+    use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+
+    // This makes a conscious choice on the various generics used by the contract
+    #[cfg_attr(not(feature = "library"), entry_point)]
+    pub fn instantiate(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo,
+        msg: InstantiateMsg,
+    ) -> StdResult<Response> {
+        let tract = Cw721Contract::<Extension, Empty,Empty,Empty>::default();
+        tract.instantiate(deps, env, info, msg)
+    }
+
+    #[cfg_attr(not(feature = "library"), entry_point)]
+    pub fn execute(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo,
+        msg: ExecuteMsg<Extension,Empty>,
+    ) -> Result<Response, ContractError> {
+        let tract = Cw721Contract::<Extension, Empty,Empty,Empty>::default();
+        tract.execute(deps, env, info, msg)
+    }
+
+    #[cfg_attr(not(feature = "library"), entry_point)]
+    pub fn query(deps: Deps, env: Env, msg: QueryMsg<Empty>) -> StdResult<Binary> {
+        let tract = Cw721Contract::<Extension, Empty, Empty, Empty>::default();
+        tract.query(deps, env, msg)
+    }
+}
